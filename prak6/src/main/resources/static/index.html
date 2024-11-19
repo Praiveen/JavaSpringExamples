@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Библиотека</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            color: black;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            color: black;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+        .section {
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Библиотека</h1>
+
+    <div class="section">
+        <h2>Добавить автора</h2>
+        <form id="authorForm">
+            <div class="form-group">
+                <label for="authorName">ФИО автора:</label>
+                <input type="text" id="authorName" required>
+            </div>
+            <button type="submit">Добавить автора</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>Добавить книгу</h2>
+        <form id="bookForm">
+            <div class="form-group">
+                <label for="bookName">Название книги:</label>
+                <input type="text" id="bookName" required>
+            </div>
+            <div class="form-group">
+                <label for="bookGenre">Жанр:</label>
+                <input type="text" id="bookGenre" required>
+            </div>
+            <div class="form-group">
+                <label for="bookAuthor">Автор:</label>
+                <select id="bookAuthor" required>
+                    <option value="">Выберите автора</option>
+                </select>
+            </div>
+            <button type="submit">Добавить книгу</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>Список авторов</h2>
+        <table id="authorsTable">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Имя</th>
+                    <th>Книги</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+
+    <div class="section">
+        <h2>Список книг</h2>
+        <table id="booksTable">
+            <thead>
+                <tr>
+                    <td>Id</td>
+                    <th >Название</th>
+                    <th >Жанр</th>
+                    <th >Автор</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const GRAPHQL_URL = 'http://localhost:8080/graphql';
+
+        async function fetchGraphQL(query, variables = {}) {
+            try {
+                const response = await fetch(GRAPHQL_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query,
+                        variables
+                    })
+                });
+                
+                const json = await response.json();
+                
+                if (json.errors) {
+                    throw new Error(json.errors[0].message);
+                }
+                
+                return json.data;
+            } catch (error) {
+                console.error('Error:', error);
+                throw error;
+            }
+        }
+
+        async function loadAuthors() {
+            const query = `
+                query {
+                    allAuthors {
+                        id
+                        name
+                    }
+                }
+            `;
+            
+            const data = await fetchGraphQL(query);
+            const authorSelect = document.getElementById('bookAuthor');
+            
+            authorSelect.innerHTML = '<option value="">Выберите автора</option>';
+            
+            data.allAuthors.forEach(author => {
+                const option = document.createElement('option');
+                option.value = author.id;
+                option.textContent = author.name;
+                authorSelect.appendChild(option);
+            });
+        }
+
+        async function loadBooks() {
+            const query = `
+                query {
+                    allBooks {
+                        id
+                        name
+                        genre
+                        author {
+                            name
+                        }
+                    }
+                }
+            `;
+            
+            const data = await fetchGraphQL(query);
+            const tbody = document.querySelector('#booksTable tbody');
+            
+            tbody.innerHTML = '';
+            
+            data.allBooks.forEach(book => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${book.id}</td>
+                    <td>${book.name}</td>
+                    <td>${book.genre}</td>
+                    <td>${book.author.name}</td>
+                    <td><button onclick="deleteBook('${book.id}')">Удалить</button></td> <!-- Кнопка для удаления книги -->
+
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+
+        async function deleteBook(bookId) {
+            const mutation = `
+                mutation {
+                    deleteBook(id: ${bookId})
+                }
+            `;
+            
+            try {
+                await fetchGraphQL(mutation, { id: bookId });
+                await loadBooks();
+                alert('Книга успешно удалена');
+            } catch (error) {
+                alert('Ошибка при удалении книги: ' + error.message);
+            }
+        }
+
+        async function loadAuthorsWithBooks() {
+            const query = `
+                query {
+                    allAuthors {
+                        id
+                        name
+                        books {
+                            name
+                        }
+                    }
+                }
+            `;
+            
+            const data = await fetchGraphQL(query);
+            const tbody = document.querySelector('#authorsTable tbody');
+                        
+            tbody.innerHTML = '';
+            
+            data.allAuthors.forEach(author => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${author.id}</td>
+                    <td>${author.name}</td>
+                    <td>${author.books.map(book => book.name).join(', ')}</td>
+                    <td><button onclick="deleteAuthor('${author.id}')">Удалить</button></td> <!-- Кнопка для удаления автора -->
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function deleteAuthor(authorId) {
+            const mutation = `
+                mutation {
+                    deleteAuthor(id: ${authorId})
+                }
+            `;
+            
+            try {
+                await fetchGraphQL(mutation, { id: authorId });
+                await loadAuthorsWithBooks();
+                
+                alert('Автор успешно удален');
+            } catch (error) {
+                alert('Ошибка при удалении автора: ' + error.message);
+            }
+        }
+
+        document.getElementById('authorForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const authorName = document.getElementById('authorName').value;
+            
+            const mutation = `
+                mutation AddAuthor($name: String!) {
+                    addAuthor(name: $name) {
+                        id
+                        name
+                    }
+                }
+            `;
+            
+            try {
+                await fetchGraphQL(mutation, { name: authorName });
+                document.getElementById('authorName').value = '';
+                await loadAuthors();
+                alert('Автор успешно добавлен');
+            } catch (error) {
+                alert('Ошибка при добавлении автора: ' + error.message);
+            }
+        });
+
+        document.getElementById('bookForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const bookName = document.getElementById('bookName').value;
+            const bookGenre = document.getElementById('bookGenre').value;
+            const authorId = document.getElementById('bookAuthor').value;
+            
+            const mutation = `
+                mutation AddBook($name: String!, $genre: String!, $authorId: ID!) {
+                    addBook(name: $name, genre: $genre, authorId: $authorId) {
+                        id
+                        name
+                        genre
+                        author {
+                            name
+                        }
+                    }
+                }
+            `;
+            
+            try {
+                await fetchGraphQL(mutation, {
+                    name: bookName,
+                    genre: bookGenre,
+                    authorId: authorId
+                });
+                
+                document.getElementById('bookName').value = '';
+                document.getElementById('bookGenre').value = '';
+                document.getElementById('bookAuthor').value = '';
+                
+                await loadBooks();
+                alert('Книга успешно добавлена');
+            } catch (error) {
+                alert('Ошибка при добавлении книги: ' + error.message);
+            }
+        });
+
+        async function init() {
+            try {
+                await Promise.all([
+                    loadAuthors(),
+                    loadBooks(),
+                    loadAuthorsWithBooks()
+                ]);
+            } catch (error) {
+                alert('Ошибка при загрузке данных: ' + error.message);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
